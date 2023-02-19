@@ -1,0 +1,3 @@
+{
+    "script": "double calc(double a, double b)\n{\n  return a * b;\n}\n"
+}
