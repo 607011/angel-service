@@ -154,10 +154,7 @@ bool execute_script(std::string const &script, std::stringstream &err)
         engine->Release();
         return false;
     }
-    std::cout << "Executing the script." << std::endl;
-    std::cout << "---" << std::endl;
     rc = ctx->Execute();
-    std::cout << "---" << std::endl;
     if (rc != asEXECUTION_FINISHED)
     {
         if (rc == asEXECUTION_ABORTED)
