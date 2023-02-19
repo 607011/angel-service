@@ -127,10 +127,10 @@ bool execute_script(std::string const &script, std::stringstream &err)
         engine->Release();
         return false;
     }
-    asIScriptFunction *func = engine->GetModule(0)->GetFunctionByDecl("double calc(double, double)");
+    asIScriptFunction *func = engine->GetModule(0)->GetFunctionByDecl("float calc(float, float)");
     if (func == nullptr)
     {
-        err << "The function 'double calc(double, double)' was not found." << std::endl;
+        err << "The function 'float calc(float, float)' was not found." << std::endl;
         ctx->Release();
         engine->Release();
         return false;
@@ -143,8 +143,8 @@ bool execute_script(std::string const &script, std::stringstream &err)
         engine->Release();
         return false;
     }
-    ctx->SetArgDouble(0, 3.14159265359);
-    ctx->SetArgDouble(1, 2.71828182846);
+    ctx->SetArgFloat(0, 3.14159265359f);
+    ctx->SetArgFloat(1, 2.71828182845904523536028747135266249775724709369995f);
     auto timeout = chrono::high_resolution_clock::now() + chrono::seconds(5);
     rc = ctx->SetLineCallback(asFUNCTION(LineCallback), &timeout, asCALL_CDECL);
     if (rc < 0)
@@ -181,8 +181,8 @@ bool execute_script(std::string const &script, std::stringstream &err)
     }
     else
     {
-        auto returnValue = ctx->GetReturnDouble();
-        std::cout << "The script function returned: " << returnValue << std::endl;
+        auto returnValue = ctx->GetReturnFloat();
+        err << "DEBUG: The script function returned: " << returnValue << std::endl;
     }
 
     engine->ClearMessageCallback();
