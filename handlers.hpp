@@ -92,18 +92,6 @@ void MessageCallback(const asSMessageInfo *msg, std::stringstream *out)
     *out << " in " << msg->section << " (" << msg->row << ", " << msg->col << ") " << msg->message << std::endl;
 }
 
-// float _sin(float x)
-// {
-//     return std::sin(x);
-// }
-
-// float _sin_Generic(asIScriptGeneric *gen)
-// {
-//     const float *const x = reinterpret_cast<float*>(gen->GetArgAddress(0));
-//     std::cout << "x = " << x << std::endl;
-//     return *x;
-// }
-
 bool execute_script(std::string const &script, std::stringstream &err)
 {
     int rc;
@@ -116,19 +104,6 @@ bool execute_script(std::string const &script, std::stringstream &err)
     rc = engine->SetMessageCallback(asFUNCTION(MessageCallback), &err, asCALL_CDECL);
     RegisterStdString(engine);
     RegisterScriptMath_Native(engine);
-
-    // rc = engine->RegisterGlobalFunction("float sin(float x)", asFUNCTION(sin), asCALL_CDECL); assert(rc >= 0);
-	// if (strstr(asGetLibraryOptions(), "AS_MAX_PORTABILITY") != nullptr)
-	// {
-    //     std::cout << "AS_MAX_PORTABILITY" << std::endl;
-	// 	   rc = engine->RegisterGlobalFunction("void Print(string &in)", asFUNCTION(PrintString_Generic), asCALL_GENERIC); assert(rc >= 0);
-    //     rc = engine->RegisterGlobalFunction("float sin(float x)", asFUNCTION(_sin_Generic), asCALL_GENERIC); assert(rc >= 0);
-	// }
-	// else
-	// {
-	// 	   rc = engine->RegisterGlobalFunction("void Print(string &in)", asFUNCTION(PrintString), asCALL_CDECL); assert(rc >= 0);
-    //     rc = engine->RegisterGlobalFunction("float sin(float x)", asFUNCTION(_sin), asCALL_CDECL); assert(rc >= 0);
-	// }
 
     asIScriptModule *mod = engine->GetModule(0, asGM_ALWAYS_CREATE);
     rc = mod->AddScriptSection("script", script.c_str(), script.size());
