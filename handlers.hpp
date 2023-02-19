@@ -214,7 +214,7 @@ struct handle_execution : trip::handler
         auto t1 = chrono::high_resolution_clock::now();
         auto dt = chrono::duration_cast<chrono::duration<double>>(t1 - t0);
         pt::ptree response;
-        response.put("errors", err.str());
+        response.put("messages", err.str());
         response.put("elapsed_msecs", "[elapsed_msecs]");
         response.put("correct", "[correct]");
         std::ostringstream ss;
