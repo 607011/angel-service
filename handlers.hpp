@@ -77,6 +77,7 @@ void LineCallback(asIScriptContext *ctx, chrono::steady_clock::time_point *timeo
 
 void MessageCallback(const asSMessageInfo *msg, std::stringstream *out)
 {
+    *out << "[";
     switch (msg->type)
     {
     case asMSGTYPE_WARNING:
@@ -85,11 +86,14 @@ void MessageCallback(const asSMessageInfo *msg, std::stringstream *out)
     case asMSGTYPE_INFORMATION:
         *out << "INFO";
         break;
-    default:
+    case asMSGTYPE_ERROR:
         *out << "ERROR";
         break;
+    default:
+        *out << "LOG";
+        break;
     }
-    *out << " in " << msg->section << " (" << msg->row << ", " << msg->col << ") " << msg->message << std::endl;
+    *out << "] " << msg->section << " (" << msg->row << ", " << msg->col << ") " << msg->message << std::endl;
 }
 
 bool execute_script(std::string const &script, std::stringstream &err)
