@@ -40,7 +40,7 @@ target_include_directories(script-webservice
   "3rdparty/angelscript/add_on"
 	PUBLIC ${Boost_INCLUDE_DIRS})
 
-add_subdirectory(3rdparty/angelscript/angelscript/projects/cmake)
+#add_subdirectory(3rdparty/angelscript/angelscript/projects/cmake)
 # add_library(angelscript STATIC ${CMAKE_SOURCE_DIR}/3rdparty/angelscript/angelscript/source)
 
 target_link_libraries(script-webservice
