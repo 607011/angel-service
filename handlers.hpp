@@ -63,7 +63,11 @@ void PrintString_Generic(asIScriptGeneric *gen)
     std::cout << *str << std::endl;
 }
 
+#ifdef __linux__
+void LineCallback(asIScriptContext *ctx, chrono::system_clock::time_point *timeout)
+#else
 void LineCallback(asIScriptContext *ctx, chrono::steady_clock::time_point *timeout)
+#endif
 {
     if (*timeout < chrono::high_resolution_clock::now())
     {
