@@ -120,7 +120,7 @@ bool execute_script(std::string const &script, std::stringstream &err)
     rc = mod->Build();
     if (rc < 0)
     {
-        err << "Build() failed." << std::endl;
+        err << "Build failed." << std::endl;
         engine->Release();
         return false;
     }
