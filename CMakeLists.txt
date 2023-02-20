@@ -13,6 +13,18 @@ message(STATUS "Boost include dirs: ${Boost_INCLUDE_DIRS}")
 message(STATUS "Boost lib dirs: ${Boost_LIBRARY_DIRS}")
 message(STATUS "Boost libs: ${Boost_LIBRARIES}")
 
+find_package(libmongocxx REQUIRED)
+find_package(libbsoncxx REQUIRED)
+include_directories(${LIBMONGOCXX_INCLUDE_DIR})
+include_directories(${LIBBSONCXX_INCLUDE_DIR})
+include_directories("/usr/local/include/mongocxx/v_noabi")
+include_directories("/usr/local/include/bsoncxx/v_noabi")
+include_directories("/usr/local/include/libmongoc-1.0")
+include_directories("/usr/local/include/libbson-1.0")
+include_directories("/usr/local/lib")
+message(STATUS "MongoDB C++ libraries: ${LIBMONGOCXX_LIBRARIES}")
+message(STATUS "BSON C++ libraries: ${LIBBSONCXX_LIBRARIES}")
+
 add_executable(script-webservice 
   main.cpp
   httpworker.cpp
@@ -38,13 +50,18 @@ target_include_directories(script-webservice
 	PRIVATE ${PROJECT_INCLUDE_DIRS}
   "3rdparty/angelscript/angelscript/include"
   "3rdparty/angelscript/add_on"
-	PUBLIC ${Boost_INCLUDE_DIRS})
+	PUBLIC ${Boost_INCLUDE_DIRS}
+  /usr/local/include/bsoncxx/v_noabi
+  /usr/local/include/mongocxx/v_noabi
+)
 
 #add_subdirectory(3rdparty/angelscript/angelscript/projects/cmake)
 # add_library(angelscript STATIC ${CMAKE_SOURCE_DIR}/3rdparty/angelscript/angelscript/source)
 
 target_link_libraries(script-webservice
 	${Boost_LIBRARIES}
+  ${LIBMONGOCXX_LIBRARIES}
+  ${LIBBSONCXX_LIBRARIES}
   ${CMAKE_SOURCE_DIR}/3rdparty/angelscript/angelscript/projects/cmake/libangelscript.a
 )
 

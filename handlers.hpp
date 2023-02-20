@@ -37,6 +37,12 @@
 
 #include <angelscript.h>
 
+#include <mongocxx/client.hpp>
+#include <bsoncxx/json.hpp>
+#include <bsoncxx/builder/stream/helpers.hpp>
+#include <bsoncxx/builder/stream/document.hpp>
+#include <bsoncxx/builder/stream/array.hpp>
+
 #include "helper.hpp"
 #include "trip/router.hpp"
 #include "trip/response_request.hpp"
@@ -96,16 +102,60 @@ void MessageCallback(const asSMessageInfo *msg, std::stringstream *out)
     *out << "] " << msg->section << " (" << msg->row << ", " << msg->col << ") " << msg->message << std::endl;
 }
 
-bool execute_script(std::string const &script, std::stringstream &err)
+bool approximately_equal(float a, float b, float epsilon = 0.000001)
 {
+    return fabs(a - b) <= ((fabs(a) < fabs(b) ? fabs(b) : fabs(a)) * epsilon);
+}
+
+bool execute_script(std::string const &script, mongocxx::collection &coll, bsoncxx::oid const &oid, std::string &err_msg, std::stringstream &err_log)
+{
+    auto query = bsoncxx::builder::stream::document{}
+            << "_id"
+            << oid
+            << bsoncxx::builder::stream::finalize;
+    auto result = coll.find_one(std::move(query));
+    if (!result)
+    {
+        err_log << "OID »" << oid.to_string() << "« not found in database." << std::endl;
+        return false;
+    }
+#ifndef NDEBUG
+    err_log << "[DEBUG]" << bsoncxx::to_json(*result) << std::endl;
+#endif
+
+    if (!result->view()["tests"])
+    {
+        err_log << "Field \"tests\" not found in database." << std::endl;
+        return false;
+    }
+    if (result->view()["tests"].type() != bsoncxx::type::k_array)
+    {
+        err_log << "Field \"tests\" is not an array." << std::endl;
+        return false;
+    }
+    auto tests = result->view()["tests"].get_array().value;
+
+    if (!result->view()["signature"])
+    {
+        err_log << "Field \"signature\" missing in task." << std::endl;
+        return false;
+    }
+    if (result->view()["signature"].type() != bsoncxx::type::k_string)
+    {
+        err_log << "Field \"signature\" is not a string." << std::endl;
+        return false;
+    }
+    auto signature = result->view()["signature"].get_string().value;
+
     int rc;
     asIScriptEngine *engine = asCreateScriptEngine();
     if (engine == nullptr)
     {
-        err << "Failed to create script engine." << std::endl;
+        std::cerr << "Failed to create script engine." << std::endl;
         return false;
     }
-    rc = engine->SetMessageCallback(asFUNCTION(MessageCallback), &err, asCALL_CDECL);
+    rc = engine->SetMessageCallback(asFUNCTION(MessageCallback), &err_log, asCALL_CDECL);
+
     RegisterStdString(engine);
     RegisterScriptMath_Native(engine);
 
@@ -113,87 +163,144 @@ bool execute_script(std::string const &script, std::stringstream &err)
     rc = mod->AddScriptSection("script", script.c_str(), script.size());
     if (rc < 0)
     {
-        err << "AddScriptSection() failed" << std::endl;
+        err_log << "AddScriptSection() failed." << std::endl;
         engine->Release();
         return false;
     }
     rc = mod->Build();
     if (rc < 0)
     {
-        err << "Build failed." << std::endl;
+        err_log << "Build failed." << std::endl;
         engine->Release();
         return false;
     }
     asIScriptContext *ctx = engine->CreateContext();
     if (ctx == nullptr)
     {
-        err << "Failed to create the context." << std::endl;
+        err_log << "Failed to create the context." << std::endl;
         engine->Release();
         return false;
     }
-    asIScriptFunction *func = engine->GetModule(0)->GetFunctionByDecl("float calc(float, float)");
+    asIScriptFunction *func = engine->GetModule(0)->GetFunctionByDecl(signature.to_string().c_str());
     if (func == nullptr)
     {
-        err << "The function 'float calc(float, float)' was not found." << std::endl;
+        err_log << "The function `" << signature.to_string() << "` could not be found." << std::endl;
         ctx->Release();
-        engine->Release();
+        engine->ShutDownAndRelease();
         return false;
     }
-    rc = ctx->Prepare(func);
-    if (rc < 0)
+    bool correct = true;
+    for (auto const &test : tests)
     {
-        err << "Failed to prepare the context." << std::endl;
-        ctx->Release();
-        engine->Release();
-        return false;
-    }
-    ctx->SetArgFloat(0, 3.14159265359f);
-    ctx->SetArgFloat(1, 2.71828182845904523536028747135266249775724709369995f);
-    auto timeout = chrono::high_resolution_clock::now() + chrono::seconds(5);
-    rc = ctx->SetLineCallback(asFUNCTION(LineCallback), &timeout, asCALL_CDECL);
-    if (rc < 0)
-    {
-        err << "Failed to set the line callback function." << std::endl;
-        ctx->Release();
-        engine->Release();
-        return false;
-    }
-    rc = ctx->Execute();
-    if (rc != asEXECUTION_FINISHED)
-    {
-        if (rc == asEXECUTION_ABORTED)
+        rc = ctx->Prepare(func);
+        if (rc < 0)
         {
-            err << "The script was aborted before it could finish. Probably it timed out." << std::endl;
+            err_log << "Failed to prepare the context." << std::endl;
+            ctx->Release();
+            engine->ShutDownAndRelease();
+            return false;
+        }
+        if (!test["input"])
+        {
+            err_log << "Field \"input\" missing in task." << std::endl;
+            ctx->Release();
+            engine->ShutDownAndRelease();
+            return false;
+        }
+        if (test["input"].type() != bsoncxx::type::k_array)
+        {
+            err_log << "Field \"input\" is not an array." << std::endl;
+            ctx->Release();
+            engine->ShutDownAndRelease();
+            return false;
+        }
+        auto input = test["input"].get_array().value;
+        if (!test["output"])
+        {
+            err_log << "Field \"output\" missing in task." << std::endl;
+            ctx->Release();
+            engine->ShutDownAndRelease();
+            return false;
+        }
+        if (test["output"].type() != bsoncxx::type::k_double)
+        {
+            err_log << "Field \"output\" is not a double." << std::endl;
+            ctx->Release();
+            engine->ShutDownAndRelease();
+            return false;
+        }
+        auto output = test["output"].get_double().value;
+        asUINT arg_idx = 0U;
+        for (auto i = input.cbegin(); i != input.cend(); ++i)
+        {
+            if (i->type() != bsoncxx::type::k_double)
+            {
+                err_log << "Field \"output\" does not contain double values." << std::endl;
+                ctx->Release();
+                engine->ShutDownAndRelease();
+                return false;
+            }
+            ctx->SetArgFloat(arg_idx++, static_cast<float>(i->get_double().value));
+        }
+        auto timeout = chrono::high_resolution_clock::now() + chrono::seconds(5);
+        rc = ctx->SetLineCallback(asFUNCTION(LineCallback), &timeout, asCALL_CDECL);
+        if (rc < 0)
+        {
+            err_log << "Failed to set the line callback function." << std::endl;
+            ctx->Release();
+            engine->ShutDownAndRelease();
+            return false;
+        }
+        rc = ctx->Execute();
+        if (rc == asEXECUTION_FINISHED)
+        {
+            auto return_value = ctx->GetReturnFloat();
+            std::cout << return_value << " ==? " << output << std::endl;
+            correct &= approximately_equal(output, return_value);
+        }
+        else if (rc == asEXECUTION_ABORTED)
+        {
+            err_log << "The script was aborted before it could finish. Probably it timed out." << std::endl;
+            correct = false;
+            break;
         }
         else if (rc == asEXECUTION_EXCEPTION)
         {
-            err << "The script ended with an exception." << std::endl;
+            err_log << "The script ended with an exception." << std::endl;
             asIScriptFunction *func = ctx->GetExceptionFunction();
-            err << "func: " << func->GetDeclaration() << std::endl;
-            err << "modl: " << func->GetModuleName() << std::endl;
-            err << "sect: " << func->GetScriptSectionName() << std::endl;
-            err << "line: " << ctx->GetExceptionLineNumber() << std::endl;
-            err << "desc: " << ctx->GetExceptionString() << std::endl;
+            err_log << "func: " << func->GetDeclaration() << std::endl;
+            err_log << "modl: " << func->GetModuleName() << std::endl;
+            err_log << "sect: " << func->GetScriptSectionName() << std::endl;
+            err_log << "line: " << ctx->GetExceptionLineNumber() << std::endl;
+            err_log << "desc: " << ctx->GetExceptionString() << std::endl;
+            correct = false;
+            break;
         }
         else
         {
-            err << "The script ended for some unforeseen reason (" << rc << ")." << std::endl;
+            err_log << "The script ended for some unforeseen reason (result code = " << rc << ")." << std::endl;
+            correct = false;
+            break;
         }
     }
-    else
-    {
-        auto returnValue = ctx->GetReturnFloat();
-        err << "DEBUG: The script function returned: " << returnValue << std::endl;
-    }
 
-    engine->ClearMessageCallback();
     ctx->Release();
     engine->ShutDownAndRelease();
-    return true;
+
+    if (!correct)
+    {
+        err_msg = "Your script failed in at least one test. Try again.";
+    }
+    return correct;
 }
 
 struct handle_execution : trip::handler
 {
+    mongocxx::collection &coll;
+    handle_execution(mongocxx::collection &coll)
+        : coll(coll)
+    {
+    }
     trip::response operator()(trip::request const &req, boost::smatch const &)
     {
         pt::ptree request;
@@ -211,14 +318,21 @@ struct handle_execution : trip::handler
         {
             return trip::response{http::status::bad_request, "{\"error\": \"field \\\"script\\\" is missing\"}"};
         }
+        if (request.find("task_id") == request.not_found())
+        {
+            return trip::response{http::status::bad_request, "{\"error\": \"field \\\"task_id\\\" is missing\"}"};
+        }
+        bsoncxx::oid oid(request.get<std::string>("task_id"));
         auto t0 = chrono::high_resolution_clock::now();
-        std::stringstream err;
+        std::stringstream err_log;
+        std::string err_msg;
         auto script = request.get<std::string>("script");
-        bool correct = execute_script(script, err);
+        bool correct = execute_script(script, coll, oid, err_msg, err_log);
         auto t1 = chrono::high_resolution_clock::now();
         auto dt = chrono::duration_cast<chrono::duration<double>>(t1 - t0);
         pt::ptree response;
-        response.put("messages", err.str());
+        response.put("error", err_msg);
+        response.put("messages", err_log.str());
         response.put("elapsed_msecs", "[elapsed_msecs]");
         response.put("correct", "[correct]");
         std::ostringstream ss;

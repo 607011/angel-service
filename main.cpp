@@ -29,7 +29,15 @@
 #include <boost/asio/signal_set.hpp>
 #include <boost/regex.hpp>
 
-#include "angelscript.h"
+#include <angelscript.h>
+
+#include <mongocxx/instance.hpp>
+#include <mongocxx/uri.hpp>
+#include <mongocxx/stdx.hpp>
+#include <mongocxx/client.hpp>
+#include <bsoncxx/builder/stream/helpers.hpp>
+#include <bsoncxx/builder/stream/document.hpp>
+#include <bsoncxx/builder/stream/array.hpp>
 
 #include "global.hpp"
 #include "helper.hpp"
@@ -92,12 +100,66 @@ int main(int argc, const char *argv[])
       num_workers = std::max(1U, boost::lexical_cast<unsigned int>(argv[3]));
       num_threads = std::max(1U, boost::lexical_cast<unsigned int>(argv[4]));
     }
-    catch (boost::exception const&)
+    catch (boost::exception const &)
     {
       usage();
       return EXIT_FAILURE;
     }
   }
+
+  mongocxx::instance instance{};
+  auto client = mongocxx::client{mongocxx::uri{"mongodb://192.168.0.181:27017"}};
+  mongocxx::database db = client["tasks"];
+  mongocxx::collection test_task_coll = db["test"];
+
+#ifdef INIT_MONGODB_COLLECTION
+  auto builder = bsoncxx::builder::stream::document{};
+  bsoncxx::document::value doc_value =
+      builder
+      << "name" << "Produkt"
+      << "task" << "Bilde das Produkt zweier float."
+      << "signature" << "float calc(float, float)"
+      << "tests"
+      << bsoncxx::builder::stream::open_array
+
+      << bsoncxx::builder::stream::open_document
+      << "input" << bsoncxx::builder::stream::open_array
+      << 0.0
+      << 0.0
+      << bsoncxx::builder::stream::close_array
+      << "output" << 0.0
+      << bsoncxx::builder::stream::close_document
+
+      << bsoncxx::builder::stream::open_document
+      << "input" << bsoncxx::builder::stream::open_array
+      << -7892.3678
+      << -1243.89679
+      << bsoncxx::builder::stream::close_array
+      << "output" << 9817290.971919362
+      << bsoncxx::builder::stream::close_document
+
+      << bsoncxx::builder::stream::open_document
+      << "input" << bsoncxx::builder::stream::open_array
+      << 2.0
+      << 3.0
+      << bsoncxx::builder::stream::close_array
+      << "output" << 6.0
+      << bsoncxx::builder::stream::close_document
+
+      << bsoncxx::builder::stream::open_document
+      << "input" << bsoncxx::builder::stream::open_array
+      << -11.0
+      << 11.0
+      << bsoncxx::builder::stream::close_array
+      << "output" << -121.0
+      << bsoncxx::builder::stream::close_document
+
+      << bsoncxx::builder::stream::close_array
+      << bsoncxx::builder::stream::finalize;
+  bsoncxx::document::view view = doc_value.view();
+  bsoncxx::stdx::optional<mongocxx::result::insert_one> result =
+    test_task_coll.insert_one(view);
+#endif
 
   boost::asio::io_context ioc;
   tcp::acceptor acceptor{ioc, {host, port}};
@@ -112,9 +174,8 @@ int main(int argc, const char *argv[])
 
   trip::router router;
   router
-    .options(boost::regex("/execute"), handle_execution_preflight{})
-    .post(boost::regex("/execute"), handle_execution{})
-  ;
+      .options(boost::regex("/execute"), handle_execution_preflight{})
+      .post(boost::regex("/execute"), handle_execution{test_task_coll});
 
   std::list<http_worker> workers;
   for (auto i = 0U; i < num_workers; ++i)
@@ -122,7 +183,7 @@ int main(int argc, const char *argv[])
     workers.emplace_back(acceptor, router, &logger);
     workers.back().start();
   }
-  
+
   std::vector<std::thread> threads;
   threads.reserve(num_threads - 1);
   for (auto i = 0U; i < num_threads - 1; ++i)
@@ -136,15 +197,15 @@ int main(int argc, const char *argv[])
 
   net::signal_set signals(ioc, SIGINT, SIGTERM);
   signals.async_wait(
-      [&ioc](boost::system::error_code const&, int)
+      [&ioc](boost::system::error_code const &, int)
       {
         ioc.stop();
       });
 
   std::cout << (num_workers > 1 ? std::to_string(num_workers) + " workers" : " 1 worker")
-     << (num_threads > 1 ? " in " + std::to_string(num_threads) + " threads" : " in 1 thread")
-     << " listening on " << host << ':' << port << " ..."
-     << std::endl;
+            << (num_threads > 1 ? " in " + std::to_string(num_threads) + " threads" : " in 1 thread")
+            << " listening on " << host << ':' << port << " ..."
+            << std::endl;
 
   ioc.run();
 

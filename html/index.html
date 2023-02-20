@@ -30,7 +30,8 @@
                     .then(json => {
                         if (!json['correct']) {
                             el.response.className = 'error';
-                            el.response.innerText = `Dein Skript enthält leider Fehler:\n${json['messages']}`;
+                            el.response.innerText = `Dein Skript enthält leider Fehler:\n${json['messages']}\n${json['error']}`;
+
                         }
                         else {
                             el.response.className = 'correct';
@@ -89,7 +90,7 @@
             #response {
                 word-wrap: normal;
                 overflow-wrap: break-word;
-                white-space: pre;
+                white-space: pre-wrap;
                 border: 1px solid var(--fg-color);
                 padding: 5px 10px;
                 font-family: monospace;
@@ -146,7 +147,7 @@
             <label for="task_id">ID der Aufgabe</label>
         </div>
         <div>
-            <input style="width: 100%" name="task_id" id="task_id" type="text" placeholder="hier die 12-stellige ID der Übungsaufgabe einfügen" value="" />
+            <input value="63f3724e59d70a0dc7069721" style="width: 100%" name="task_id" id="task_id" type="text" placeholder="hier die 24-stellige ID der Übungsaufgabe einfügen" />
         </div>
         <div>
             <label for="email">Deine Mailadresse</label>
