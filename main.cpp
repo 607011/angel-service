@@ -174,8 +174,10 @@ int main(int argc, const char *argv[])
 
   trip::router router;
   router
-      .options(boost::regex("/execute"), handle_execution_preflight{})
-      .post(boost::regex("/execute"), handle_execution{test_task_coll});
+      .get(std::regex("/find/task/([0-9a-f]{24})"), handle_find_task{test_task_coll})
+      .get(std::regex("/tasks"), handle_task_list{test_task_coll})
+      .options(std::regex("/execute"), handle_execution_preflight{})
+      .post(std::regex("/execute"), handle_execution{test_task_coll});
 
   std::list<http_worker> workers;
   for (auto i = 0U; i < num_workers; ++i)

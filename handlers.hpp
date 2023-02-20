@@ -26,6 +26,7 @@
 #include <utility>
 #include <algorithm>
 #include <memory>
+#include <regex>
 
 #include <boost/asio/io_context.hpp>
 #include <boost/beast/http/string_body.hpp>
@@ -34,6 +35,7 @@
 #include <boost/algorithm/string/replace.hpp>
 #include <boost/regex.hpp>
 #include <boost/lexical_cast.hpp>
+#include <boost/url.hpp>
 
 #include <angelscript.h>
 
@@ -255,7 +257,6 @@ bool execute_script(std::string const &script, mongocxx::collection &coll, bsonc
         if (rc == asEXECUTION_FINISHED)
         {
             auto return_value = ctx->GetReturnFloat();
-            std::cout << return_value << " ==? " << output << std::endl;
             correct &= approximately_equal(output, return_value);
         }
         else if (rc == asEXECUTION_ABORTED)
@@ -294,6 +295,35 @@ bool execute_script(std::string const &script, mongocxx::collection &coll, bsonc
     return correct;
 }
 
+struct handle_find_task : trip::handler
+{
+    mongocxx::collection &coll;
+    handle_find_task(mongocxx::collection &coll)
+        : coll(coll)
+    {
+    }
+    trip::response operator()(trip::request const &req, std::regex const &re)
+    {
+        url::result<url::url_view> const &target = url::parse_origin_form(req.target());
+        std::string const &path = target->path();
+        std::smatch match;
+        if (!std::regex_match(path, match, re))
+        {
+            return trip::response{http::status::no_content, ""};
+        }
+        auto query = bsoncxx::builder::stream::document{}
+                << "_id"
+                << bsoncxx::oid(match[1].str())
+                << bsoncxx::builder::stream::finalize;
+        auto const result = coll.find_one(std::move(query));
+        if (!result)
+        {
+            return trip::response{http::status::no_content, ""};
+        }
+        return trip::response{http::status::ok, ""};
+    }
+};
+
 struct handle_execution : trip::handler
 {
     mongocxx::collection &coll;
@@ -301,7 +331,7 @@ struct handle_execution : trip::handler
         : coll(coll)
     {
     }
-    trip::response operator()(trip::request const &req, boost::smatch const &)
+    trip::response operator()(trip::request const &req, std::regex const &)
     {
         pt::ptree request;
         std::stringstream iss;
@@ -346,7 +376,20 @@ struct handle_execution : trip::handler
 
 struct handle_execution_preflight : trip::handler
 {
-    trip::response operator()(trip::request const &req, boost::smatch const &)
+    trip::response operator()(trip::request const &req, std::regex const &)
+    {
+        return trip::response{http::status::ok, ""};
+    }
+};
+
+struct handle_task_list : trip::handler
+{
+    mongocxx::collection &coll;
+    handle_task_list(mongocxx::collection &coll)
+        : coll(coll)
+    {
+    }
+    trip::response operator()(trip::request const &req, std::regex const &)
     {
         return trip::response{http::status::ok, ""};
     }

@@ -6,9 +6,42 @@
             (function(window) {
                 const URL = {
                     SUBMIT: 'http://192.168.0.181:31337/execute',
+                    CHECK_TASK_ID: 'http://192.168.0.181:31337/find/task',
                 };
                 let el = {};
+                function checkTaskId(id) {
+                    if (id.match(/[0-9a-f]{24}/)) {
+                        fetch(`${URL.CHECK_TASK_ID}/${id}`, {
+                            method: 'GET',
+                            mode: 'cors',
+                            cache: 'no-cache',
+                            credentials: 'same-origin',
+                            body: null,
+                        })
+                        .then(response => {
+                            switch (response.status) {
+                                case 200: // OK
+                                    el.task_id.classList.add('valid');
+                                    el.button.removeAttribute('disabled');
+                                    break;
+                                case 204: // NO CONTENT
+                                default:
+                                    el.task_id.classList.remove('valid');
+                                    el.button.setAttribute('disabled', true);
+                                    break;
+                            }
+                        })
+                        .catch(e => {
+                            el.task_id.classList.remove('valid');
+                            console.error(e);
+                        });
+                    }
+                }
                 function submit(e) {
+                    if (!el.email.value.match(/^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/)) {
+                        console.log('Invalid email address');
+                        return;
+                    }
                     let data = {
                         'task_id': el.task_id.value,
                         'email': el.email.value,
@@ -28,24 +61,28 @@
                     })
                     .then(response => response.json())
                     .then(json => {
-                        if (!json['correct']) {
+                        if (json['correct'] === false) {
                             el.response.className = 'error';
                             el.response.innerText = `Dein Skript enthält leider Fehler:\n${json['messages']}\n${json['error']}`;
-
                         }
                         else {
                             el.response.className = 'correct';
                             el.response.innerText = 'Dein Skript ist richtig. Vielen Dank für die Einsendung.';
                         }
+                    })
+                    .catch(e => {
+                        console.error(e);
                     });
                 }
                 function main() {
                     el.task_id = document.querySelector('#task_id');
+                    el.task_id.addEventListener('input', e =>  checkTaskId(e.target.value));
                     el.email = document.querySelector('#email');
                     el.script = document.querySelector('#script');
                     el.button = document.querySelector('#submit');
                     el.response = document.querySelector('#response');
                     el.button.addEventListener('click', submit)
+                    checkTaskId(el.task_id.value);
                 }
                 window.addEventListener('load', main);
             })(window);
@@ -60,9 +97,11 @@
                 -webkit-font-smoothing: antialiased;
             }
             :root {
-                --field-color: #fff;
+                --field-color: #f8f8f8;
                 --bg-color: #ddd;
                 --fg-color: #333;
+                --valid-color: #92d5ac;
+                --semi-valid-color: #cdd592;
             }
             html {
                 font-family: Arial, Helvetica, sans-serif;
@@ -84,6 +123,12 @@
                 border-radius: 0;
                 border: 1px solid var(--fg-color);
             }
+            #task_id.valid, #email:valid {
+                background-color: var(--valid-color) !important;
+            }
+            #task_id:valid {
+                background-color: var(--semi-valid-color);
+            }
             label {
                 font-weight: bold;
             }
@@ -102,7 +147,7 @@
                 height: auto;
             }
             #response.correct {
-                background-color: #36c156;
+                background-color: var(--valid-color);
                 height: auto;
             }
             #response.pending {
@@ -134,10 +179,19 @@
                 border-radius: 0;
                 border: 1px solid var(--fg-color);
                 background-color: var(--field-color);
+                cursor: pointer;
             }
             button:active {
                 background-color: var(--fg-color);
                 color: var(--bg-color);
+            }
+            button:disabled {
+                cursor: not-allowed;
+            }
+            button:disabled:active {
+                background-color: var(--field-color);
+                color: var(--bg-color);
+                cursor: auto;
             }
 
         </style>
@@ -147,7 +201,7 @@
             <label for="task_id">ID der Aufgabe</label>
         </div>
         <div>
-            <input value="63f3724e59d70a0dc7069721" style="width: 100%" name="task_id" id="task_id" type="text" placeholder="hier die 24-stellige ID der Übungsaufgabe einfügen" />
+            <input value="63f3724e59d70a0dc7069721" pattern="[0-9a-f]{24}" style="width: 100%" name="task_id" id="task_id" type="text" placeholder="hier die 24-stellige ID der Übungsaufgabe einfügen" />
         </div>
         <div>
             <label for="email">Deine Mailadresse</label>
