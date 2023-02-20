@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="de">
+    <head>
+        <meta charset="utf-8">
+        <script type="text/javascript">
+            (function(window) {
+                const URL = {
+                    SUBMIT: 'http://192.168.0.181:31337/execute',
+                };
+                let el = {};
+                function submit(e) {
+                    let data = {
+                        'task_id': el.task_id.value,
+                        'email': el.email.value,
+                        'script': el.script.value,
+                    };
+                    el.response.className = 'wait';
+                    el.response.innerText = '';
+                    fetch(URL.SUBMIT, {
+                        method: 'POST',
+                        mode: 'cors',
+                        cache: 'no-cache',
+                        credentials: 'same-origin',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify(data),
+                    })
+                    .then(response => response.json())
+                    .then(json => {
+                        if (!json['correct']) {
+                            el.response.className = 'error';
+                            el.response.innerText = `Dein Skript enthält leider Fehler:\n${json['messages']}`;
+                        }
+                        else {
+                            el.response.className = 'correct';
+                            el.response.innerText = 'Dein Skript ist richtig. Vielen Dank für die Einsendung.';
+                        }
+                    });
+                }
+                function main() {
+                    el.task_id = document.querySelector('#task_id');
+                    el.email = document.querySelector('#email');
+                    el.script = document.querySelector('#script');
+                    el.button = document.querySelector('#submit');
+                    el.response = document.querySelector('#response');
+                    el.button.addEventListener('click', submit)
+                }
+                window.addEventListener('load', main);
+            })(window);
+        </script>
+        <style type="text/css">
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+                -webkit-box-sizing: border-box;
+                -moz-box-sizing: border-box;
+                -webkit-font-smoothing: antialiased;
+            }
+            :root {
+                --field-color: #fff;
+                --bg-color: #ddd;
+                --fg-color: #333;
+            }
+            html {
+                font-family: Arial, Helvetica, sans-serif;
+                background-color: var(--bg-color);
+                color: var(--fg-color);
+                font-size: 11pt;
+            }
+            body {
+                padding: 5px 10px;
+            }
+            div {
+                margin-top: 5px;
+            }
+            textarea#script {
+                height: 320px;
+                width: 100%;
+                padding: 2px;
+                font-family: monospace;
+                border-radius: 0;
+                border: 1px solid var(--fg-color);
+            }
+            label {
+                font-weight: bold;
+            }
+            #response {
+                word-wrap: normal;
+                overflow-wrap: break-word;
+                white-space: pre;
+                border: 1px solid var(--fg-color);
+                padding: 5px 10px;
+                font-family: monospace;
+                font-size: smaller;
+                height: 12px;
+            }
+            #response.error {
+                background-color: #d25353;
+                height: auto;
+            }
+            #response.correct {
+                background-color: #36c156;
+                height: auto;
+            }
+            #response.pending {
+                height: auto;
+            }
+            #response.wait {
+                --progressbar-color1: rgb(240, 164, 93);
+                --progressbar-color2: rgb(92, 97, 43);
+                --size: 12px;
+                --height: 12px;
+                background-color: var(--progressbar-color1);
+                background-image: linear-gradient(-45deg, var(--progressbar-color2) 25%, transparent 25%, transparent 50%, var(--progressbar-color2) 50%, var(--progressbar-color2) 75%, transparent 75%, transparent);
+                background-size: var(--size) var(--size);
+                box-shadow: inset 0 calc(var(--height) / 2) 0 rgba(255, 255, 255, .2);
+                animation: moveBackground 500ms linear infinite;
+            }
+            @keyframes moveBackground {
+                to { background-position-x: 0; }
+                from { background-position-x: var(--size); }
+            }
+            input[type="text"], input[type="email"] {
+                padding: 5px 5px;
+                border-radius: 0;
+                border: 1px solid var(--fg-color);
+                background-color: var(--field-color);
+            }
+            button {
+                padding: 5px 10px;
+                border-radius: 0;
+                border: 1px solid var(--fg-color);
+                background-color: var(--field-color);
+            }
+            button:active {
+                background-color: var(--fg-color);
+                color: var(--bg-color);
+            }
+
+        </style>
+    </head>
+    <body>
+        <div>
+            <label for="task_id">ID der Aufgabe</label>
+        </div>
+        <div>
+            <input style="width: 100%" name="task_id" id="task_id" type="text" placeholder="hier die 12-stellige ID der Übungsaufgabe einfügen" value="" />
+        </div>
+        <div>
+            <label for="email">Deine Mailadresse</label>
+        </div>
+        <div>
+            <input style="width: 100%" type="email" name="email" id="email" type="text" placeholder="E-Mail-Adresse" value="" />
+        </div>
+        <div>
+            <label for="script">Code (<a href="http://www.angelcode.com/angelscript/" target="_blank">AngelScript</a></label>)
+        </div>
+        <div>
+            <textarea name="script" id="script" placeholder="hier dein Skript einfügen">
+float multiply(float a, float b)
+{
+    return a * b;
+}
+
+float calc(float a, float b)
+{
+    return multiply(a, b);
+}</textarea>
+        </div>
+        <div>
+            <button id="submit">Absenden</button>
+        </div>
+        <div id="response" class="pending">Das Ergebnis erscheint hier, nachdem du auf „Absenden“ gedrückt hast.</div>
+    </body>
+</html>
