@@ -51,6 +51,13 @@ namespace trip
 
     public:
         template <typename F>
+        router &options(boost::regex endpoint, F handler) noexcept
+        {
+            routes_.emplace_back(http::verb::options, endpoint, handler);
+            return *this;
+        }
+
+        template <typename F>
         router &head(boost::regex endpoint, F handler) noexcept
         {
             routes_.emplace_back(http::verb::head, endpoint, handler);

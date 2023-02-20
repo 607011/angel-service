@@ -112,6 +112,7 @@ int main(int argc, const char *argv[])
 
   trip::router router;
   router
+    .options(boost::regex("/execute"), handle_execution_preflight{})
     .post(boost::regex("/execute"), handle_execution{})
   ;
 

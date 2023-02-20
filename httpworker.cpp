@@ -111,6 +111,11 @@ void http_worker::send()
 {
   response_->set(http::field::server, SERVER_INFO);
   response_->set(http::field::access_control_allow_origin, "*");
+  response_->set(http::field::access_control_allow_headers, "x-csrf-token,authorization,content-type,accept,origin,x-requested-with,access-control-allow-origin");
+  response_->set(http::field::access_control_allow_methods, "GET,POST,OPTIONS");
+#ifndef NDEBUG
+  response_->set("X-Debug", "all");
+#endif
   response_->prepare_payload();
   serializer_.emplace(*response_);
   http::async_write(

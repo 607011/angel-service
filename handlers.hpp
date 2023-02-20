@@ -230,4 +230,12 @@ struct handle_execution : trip::handler
     }
 };
 
+struct handle_execution_preflight : trip::handler
+{
+    trip::response operator()(trip::request const &req, boost::smatch const &)
+    {
+        return trip::response{http::status::ok, ""};
+    }
+};
+
 #endif // __HANDLERS_HPP__
