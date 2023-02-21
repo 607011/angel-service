@@ -21,6 +21,8 @@
 #include <iostream>
 #include <iomanip>
 #include <chrono>
+#include <string>
+#include <sstream>
 #include <ctime>
 
 template<typename Clock, typename Duration>

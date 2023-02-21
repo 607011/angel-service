@@ -25,10 +25,13 @@ include_directories("/usr/local/lib")
 message(STATUS "MongoDB C++ libraries: ${LIBMONGOCXX_LIBRARIES}")
 message(STATUS "BSON C++ libraries: ${LIBBSONCXX_LIBRARIES}")
 
-add_executable(script-webservice 
+add_executable(script-webservice
   main.cpp
   httpworker.cpp
   helper.cpp
+  handlers/handle_execution.cpp
+  handlers/handle_find_task.cpp
+  handlers/handle_task_list.cpp
   3rdparty/angelscript/add_on/scriptstdstring/scriptstdstring.cpp
   3rdparty/angelscript/add_on/scriptmath/scriptmath.cpp
 )

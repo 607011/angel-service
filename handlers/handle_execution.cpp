@@ -14,9 +14,8 @@
  You should have received a copy of the GNU General Public License
  along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-#pragma once
-#ifndef __HANDLERS_HPP__
-#define __HANDLERS_HPP__
+
+#include "handlers.hpp"
 
 #include <string>
 #include <iostream>
@@ -26,29 +25,20 @@
 #include <utility>
 #include <algorithm>
 #include <memory>
-#include <regex>
 
 #include <boost/asio/io_context.hpp>
 #include <boost/beast/http/string_body.hpp>
 #include <boost/property_tree/ptree.hpp>
 #include <boost/property_tree/json_parser.hpp>
 #include <boost/algorithm/string/replace.hpp>
-#include <boost/regex.hpp>
-#include <boost/lexical_cast.hpp>
 #include <boost/url.hpp>
 
-#include <angelscript.h>
-
-#include <mongocxx/client.hpp>
+#include <mongocxx/cursor.hpp>
 #include <bsoncxx/json.hpp>
+#include <bsoncxx/exception/exception.hpp>
 #include <bsoncxx/builder/stream/helpers.hpp>
 #include <bsoncxx/builder/stream/document.hpp>
 #include <bsoncxx/builder/stream/array.hpp>
-
-#include "helper.hpp"
-#include "trip/router.hpp"
-#include "trip/response_request.hpp"
-#include "trip/handler.hpp"
 
 namespace pt = boost::property_tree;
 namespace beast = boost::beast;
@@ -112,9 +102,9 @@ bool approximately_equal(float a, float b, float epsilon = 0.000001)
 bool execute_script(std::string const &script, mongocxx::collection &coll, bsoncxx::oid const &oid, std::string &err_msg, std::stringstream &err_log)
 {
     auto query = bsoncxx::builder::stream::document{}
-            << "_id"
-            << oid
-            << bsoncxx::builder::stream::finalize;
+                 << "_id"
+                 << oid
+                 << bsoncxx::builder::stream::finalize;
     auto result = coll.find_one(std::move(query));
     if (!result)
     {
@@ -295,104 +285,62 @@ bool execute_script(std::string const &script, mongocxx::collection &coll, bsonc
     return correct;
 }
 
-struct handle_find_task : trip::handler
-{
-    mongocxx::collection &coll;
-    handle_find_task(mongocxx::collection &coll)
-        : coll(coll)
-    {
-    }
-    trip::response operator()(trip::request const &req, std::regex const &re)
-    {
-        url::result<url::url_view> const &target = url::parse_origin_form(req.target());
-        std::string const &path = target->path();
-        std::smatch match;
-        if (!std::regex_match(path, match, re))
-        {
-            return trip::response{http::status::no_content, ""};
-        }
-        auto query = bsoncxx::builder::stream::document{}
-                << "_id"
-                << bsoncxx::oid(match[1].str())
-                << bsoncxx::builder::stream::finalize;
-        auto const result = coll.find_one(std::move(query));
-        if (!result)
-        {
-            return trip::response{http::status::no_content, ""};
-        }
-        return trip::response{http::status::ok, ""};
-    }
-};
 
-struct handle_execution : trip::handler
+handle_execution::handle_execution(mongocxx::collection &coll)
+    : coll(coll)
 {
-    mongocxx::collection &coll;
-    handle_execution(mongocxx::collection &coll)
-        : coll(coll)
+}
+trip::response handle_execution::operator()(trip::request const &req, std::regex const &)
+{
+    pt::ptree request;
+    std::stringstream iss;
+    iss << req.body();
+    try
     {
+        pt::read_json(iss, request);
     }
-    trip::response operator()(trip::request const &req, std::regex const &)
+    catch (pt::ptree_error const &e)
     {
-        pt::ptree request;
-        std::stringstream iss;
-        iss << req.body();
-        try
-        {
-            pt::read_json(iss, request);
-        }
-        catch (pt::ptree_error const &e)
-        {
-            return trip::response{http::status::bad_request, "{\"error\": \"" + std::string(e.what()) + "\""};
-        }
-        if (request.find("script") == request.not_found())
-        {
-            return trip::response{http::status::bad_request, "{\"error\": \"field \\\"script\\\" is missing\"}"};
-        }
-        if (request.find("task_id") == request.not_found())
-        {
-            return trip::response{http::status::bad_request, "{\"error\": \"field \\\"task_id\\\" is missing\"}"};
-        }
+        return trip::response{http::status::bad_request, "{\"error\": \"" + std::string(e.what()) + "\""};
+    }
+    if (request.find("script") == request.not_found())
+    {
+        return trip::response{http::status::bad_request, "{\"error\": \"field \\\"script\\\" is missing\"}"};
+    }
+    if (request.find("task_id") == request.not_found())
+    {
+        return trip::response{http::status::bad_request, "{\"error\": \"field \\\"task_id\\\" is missing\"}"};
+    }
+    try
+    {
         bsoncxx::oid oid(request.get<std::string>("task_id"));
-        auto t0 = chrono::high_resolution_clock::now();
-        std::stringstream err_log;
-        std::string err_msg;
-        auto script = request.get<std::string>("script");
-        bool correct = execute_script(script, coll, oid, err_msg, err_log);
-        auto t1 = chrono::high_resolution_clock::now();
-        auto dt = chrono::duration_cast<chrono::duration<double>>(t1 - t0);
-        pt::ptree response;
-        response.put("error", err_msg);
-        response.put("messages", err_log.str());
-        response.put("elapsed_msecs", "[elapsed_msecs]");
-        response.put("correct", "[correct]");
-        std::ostringstream ss;
-        pt::write_json(ss, response, true);
-        std::string responseStr = ss.str();
-        boost::replace_all(responseStr, "\"[elapsed_msecs]\"", std::to_string(1e3 * dt.count()));
-        boost::replace_all(responseStr, "\"[correct]\"", correct ? "true" : "false");
-        return trip::response{http::status::ok, responseStr};
     }
-};
+    catch(bsoncxx::exception const& e)
+    {
+        return trip::response{http::status::bad_request, e.what(), "text/plain"};
+    }
+    bsoncxx::oid oid(request.get<std::string>("task_id"));
+    auto t0 = chrono::high_resolution_clock::now();
+    std::stringstream err_log;
+    std::string err_msg;
+    auto script = request.get<std::string>("script");
+    bool correct = execute_script(script, coll, oid, err_msg, err_log);
+    auto t1 = chrono::high_resolution_clock::now();
+    auto dt = chrono::duration_cast<chrono::duration<double>>(t1 - t0);
+    pt::ptree response;
+    response.put("error", err_msg);
+    response.put("messages", err_log.str());
+    response.put("elapsed_msecs", "[elapsed_msecs]");
+    response.put("correct", "[correct]");
+    std::ostringstream ss;
+    pt::write_json(ss, response, true);
+    std::string responseStr = ss.str();
+    boost::replace_all(responseStr, "\"[elapsed_msecs]\"", std::to_string(1e3 * dt.count()));
+    boost::replace_all(responseStr, "\"[correct]\"", correct ? "true" : "false");
+    return trip::response{http::status::ok, responseStr};
+}
 
-struct handle_execution_preflight : trip::handler
+trip::response handle_execution_preflight::operator()(trip::request const &req, std::regex const &)
 {
-    trip::response operator()(trip::request const &req, std::regex const &)
-    {
-        return trip::response{http::status::ok, ""};
-    }
-};
-
-struct handle_task_list : trip::handler
-{
-    mongocxx::collection &coll;
-    handle_task_list(mongocxx::collection &coll)
-        : coll(coll)
-    {
-    }
-    trip::response operator()(trip::request const &req, std::regex const &)
-    {
-        return trip::response{http::status::ok, ""};
-    }
-};
-
-#endif // __HANDLERS_HPP__
+    return trip::response{http::status::ok, ""};
+}

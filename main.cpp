@@ -35,15 +35,12 @@
 #include <mongocxx/uri.hpp>
 #include <mongocxx/stdx.hpp>
 #include <mongocxx/client.hpp>
-#include <bsoncxx/builder/stream/helpers.hpp>
-#include <bsoncxx/builder/stream/document.hpp>
-#include <bsoncxx/builder/stream/array.hpp>
 
 #include "global.hpp"
 #include "helper.hpp"
 #include "httpworker.hpp"
-#include "handlers.hpp"
 #include "trip/router.hpp"
+#include "handlers/handlers.hpp"
 
 #ifndef NDEBUG
 const char *DEFAULT_HOST = "0.0.0.0";
@@ -112,55 +109,6 @@ int main(int argc, const char *argv[])
   mongocxx::database db = client["tasks"];
   mongocxx::collection test_task_coll = db["test"];
 
-#ifdef INIT_MONGODB_COLLECTION
-  auto builder = bsoncxx::builder::stream::document{};
-  bsoncxx::document::value doc_value =
-      builder
-      << "name" << "Produkt"
-      << "task" << "Bilde das Produkt zweier float."
-      << "signature" << "float calc(float, float)"
-      << "tests"
-      << bsoncxx::builder::stream::open_array
-
-      << bsoncxx::builder::stream::open_document
-      << "input" << bsoncxx::builder::stream::open_array
-      << 0.0
-      << 0.0
-      << bsoncxx::builder::stream::close_array
-      << "output" << 0.0
-      << bsoncxx::builder::stream::close_document
-
-      << bsoncxx::builder::stream::open_document
-      << "input" << bsoncxx::builder::stream::open_array
-      << -7892.3678
-      << -1243.89679
-      << bsoncxx::builder::stream::close_array
-      << "output" << 9817290.971919362
-      << bsoncxx::builder::stream::close_document
-
-      << bsoncxx::builder::stream::open_document
-      << "input" << bsoncxx::builder::stream::open_array
-      << 2.0
-      << 3.0
-      << bsoncxx::builder::stream::close_array
-      << "output" << 6.0
-      << bsoncxx::builder::stream::close_document
-
-      << bsoncxx::builder::stream::open_document
-      << "input" << bsoncxx::builder::stream::open_array
-      << -11.0
-      << 11.0
-      << bsoncxx::builder::stream::close_array
-      << "output" << -121.0
-      << bsoncxx::builder::stream::close_document
-
-      << bsoncxx::builder::stream::close_array
-      << bsoncxx::builder::stream::finalize;
-  bsoncxx::document::view view = doc_value.view();
-  bsoncxx::stdx::optional<mongocxx::result::insert_one> result =
-    test_task_coll.insert_one(view);
-#endif
-
   boost::asio::io_context ioc;
   tcp::acceptor acceptor{ioc, {host, port}};
 
@@ -175,7 +123,7 @@ int main(int argc, const char *argv[])
   trip::router router;
   router
       .get(std::regex("/find/task/([0-9a-f]{24})"), handle_find_task{test_task_coll})
-      .get(std::regex("/tasks"), handle_task_list{test_task_coll})
+      .get(std::regex("/tasks/(all|current|archived)"), handle_task_list{test_task_coll})
       .options(std::regex("/execute"), handle_execution_preflight{})
       .post(std::regex("/execute"), handle_execution{test_task_coll});
 

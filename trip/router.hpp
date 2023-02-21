@@ -50,29 +50,25 @@ namespace trip
         };
 
     public:
-        template <typename F>
-        router &options(std::regex endpoint, F handler) noexcept
+        inline router &options(std::regex endpoint, handler_t handler) noexcept
         {
             routes_.emplace_back(http::verb::options, endpoint, handler);
             return *this;
         }
 
-        template <typename F>
-        router &head(std::regex endpoint, F handler) noexcept
+        inline router &head(std::regex endpoint, handler_t handler) noexcept
         {
             routes_.emplace_back(http::verb::head, endpoint, handler);
             return *this;
         }
 
-        template <typename F>
-        router &get(std::regex endpoint, F handler) noexcept
+        inline router &get(std::regex endpoint, handler_t handler) noexcept
         {
             routes_.emplace_back(http::verb::get, endpoint, handler);
             return *this;
         }
 
-        template <typename F>
-        router &post(std::regex endpoint, F handler) noexcept
+        inline router &post(std::regex endpoint, handler_t handler) noexcept
         {
             routes_.emplace_back(http::verb::post, endpoint, handler);
             return *this;

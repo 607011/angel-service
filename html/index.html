@@ -7,43 +7,51 @@
                 const URL = {
                     SUBMIT: 'http://192.168.0.181:31337/execute',
                     CHECK_TASK_ID: 'http://192.168.0.181:31337/find/task',
+                    CURRENT_TASKS: 'http://192.168.0.181:31337/tasks/current',
                 };
                 let el = {};
-                function checkTaskId(id) {
-                    if (id.match(/[0-9a-f]{24}/)) {
-                        fetch(`${URL.CHECK_TASK_ID}/${id}`, {
-                            method: 'GET',
-                            mode: 'cors',
-                            cache: 'no-cache',
-                            credentials: 'same-origin',
-                            body: null,
-                        })
-                        .then(response => {
-                            switch (response.status) {
-                                case 200: // OK
-                                    el.task_id.classList.add('valid');
-                                    el.button.removeAttribute('disabled');
-                                    break;
-                                case 204: // NO CONTENT
-                                default:
-                                    el.task_id.classList.remove('valid');
-                                    el.button.setAttribute('disabled', true);
-                                    break;
-                            }
-                        })
-                        .catch(e => {
-                            el.task_id.classList.remove('valid');
-                            console.error(e);
-                        });
+                function showError(msg) {
+                    el.response.className = 'error';
+                    el.response.innerText = msg;
+                    el.button.setAttribute('disabled', true);
+                }
+                function showMessage(msg, okay = false) {
+                    if (okay) {
+                        el.response.className = 'correct';
+                    }
+                    else {
+                        el.response.className = '';
+                    }
+                    if (msg === null) {
+                        el.response.innerHTML = el.response.getAttribute('default-value');
+                    }
+                    else {
+                        el.response.innerText = msg;
                     }
                 }
+                function checkIfFormIsValid() {
+                    if (!el.email.value.match(/^[a-zA-Z0-9.!#$%&'*+\/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/)) {
+                        showError('Ungültige E-Mail-Adresse.');
+                        return false;
+                    }
+                    if (!el.tasks.selectedOptions[el.tasks.selectedIndex].value.match(/[0-9a-f]{24}/)) {
+                        showError('Ungültige Aufgaben-ID.')
+                        return false;
+                    }
+                    if (el.script.value.length === 0) {
+                        showError('Kein Skript eingegeben.')
+                        return false;
+                    }
+                    showMessage(null, true);
+                    el.button.removeAttribute('disabled');
+                    return true;
+                }
                 function submit(e) {
-                    if (!el.email.value.match(/^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/)) {
-                        console.log('Invalid email address');
+                    if (!checkIfFormIsValid()) {
                         return;
                     }
                     let data = {
-                        'task_id': el.task_id.value,
+                        'task_id': el.tasks.selectedOptions[el.tasks.selectedIndex].value,
                         'email': el.email.value,
                         'script': el.script.value,
                     };
@@ -61,28 +69,62 @@
                     })
                     .then(response => response.json())
                     .then(json => {
-                        if (json['correct'] === false) {
-                            el.response.className = 'error';
-                            el.response.innerText = `Dein Skript enthält leider Fehler:\n${json['messages']}\n${json['error']}`;
+                        if (json['correct'] === true) {
+                            showMessage('Dein Skript ist richtig. Vielen Dank für die Einsendung.');
                         }
                         else {
-                            el.response.className = 'correct';
-                            el.response.innerText = 'Dein Skript ist richtig. Vielen Dank für die Einsendung.';
+                            showError(`Dein Skript enthält leider Fehler:\n${json['messages']}\n${json['error']}`);
                         }
                     })
                     .catch(e => {
-                        console.error(e);
+                        showError(e);
                     });
                 }
+                function fetchCurrentTasks() {
+                    fetch(URL.CURRENT_TASKS, {
+                            method: 'GET',
+                            mode: 'cors',
+                            cache: 'no-cache',
+                            credentials: 'same-origin',
+                            body: null,
+                        })
+                        .then(response => {
+                            switch (response.status) {
+                                case 200: // OK
+                                    response.json().then(json => {
+                                        let options = [];
+                                        for (const task of json) {
+                                            let option = document.createElement('option');
+                                            option.innerHTML = `[${task.name}] ${task.task}`;
+                                            option.value = task['_id']['$oid'];
+                                            options.push(option);
+                                        }
+                                        el.tasks.replaceChildren(...options);
+                                    });
+                                    break;
+                                case 204: // NO CONTENT
+                                default:
+                                    showError('Zurzeit gibt es keine Aufgaben zu lösen.');
+                                    break;
+                            }
+                        })
+                        .catch(e => {
+                            showError(e);
+                        });
+                }
                 function main() {
-                    el.task_id = document.querySelector('#task_id');
-                    el.task_id.addEventListener('input', e =>  checkTaskId(e.target.value));
+                    el.tasks = document.querySelector('select#tasks');
                     el.email = document.querySelector('#email');
+                    el.email.addEventListener('input', checkIfFormIsValid);
+                    el.email.addEventListener('change', checkIfFormIsValid);
                     el.script = document.querySelector('#script');
+                    el.script.addEventListener('input', checkIfFormIsValid);
+                    el.script.addEventListener('blur', checkIfFormIsValid);
                     el.button = document.querySelector('#submit');
                     el.response = document.querySelector('#response');
-                    el.button.addEventListener('click', submit)
-                    checkTaskId(el.task_id.value);
+                    el.button.addEventListener('click', submit);
+                    fetchCurrentTasks();
+                    showMessage(null);
                 }
                 window.addEventListener('load', main);
             })(window);
@@ -94,7 +136,6 @@
                 box-sizing: border-box;
                 -webkit-box-sizing: border-box;
                 -moz-box-sizing: border-box;
-                -webkit-font-smoothing: antialiased;
             }
             :root {
                 --field-color: #f8f8f8;
@@ -102,6 +143,7 @@
                 --fg-color: #333;
                 --valid-color: #92d5ac;
                 --semi-valid-color: #cdd592;
+                --invalid-color: #d25353;
             }
             html {
                 font-family: Arial, Helvetica, sans-serif;
@@ -123,7 +165,7 @@
                 border-radius: 0;
                 border: 1px solid var(--fg-color);
             }
-            #task_id.valid, #email:valid {
+            #task_id.valid {
                 background-color: var(--valid-color) !important;
             }
             #task_id:valid {
@@ -140,7 +182,7 @@
                 padding: 5px 10px;
                 font-family: monospace;
                 font-size: smaller;
-                height: 12px;
+                height: auto;
             }
             #response.error {
                 background-color: #d25353;
@@ -151,7 +193,7 @@
                 height: auto;
             }
             #response.pending {
-                height: auto;
+                height: 12px;
             }
             #response.wait {
                 --progressbar-color1: rgb(240, 164, 93);
@@ -168,11 +210,20 @@
                 to { background-position-x: 0; }
                 from { background-position-x: var(--size); }
             }
-            input[type="text"], input[type="email"] {
+            input#email {
                 padding: 5px 5px;
                 border-radius: 0;
                 border: 1px solid var(--fg-color);
                 background-color: var(--field-color);
+                width: 100%;
+            }
+            input:invalid+span:after {
+                display: inline-block;
+                position: relative;
+                left: -20px;
+                content: "*";
+                color: red;
+                font-weight: bold;
             }
             button {
                 padding: 5px 10px;
@@ -193,40 +244,37 @@
                 color: var(--bg-color);
                 cursor: auto;
             }
-
+            select {
+                padding: 5px;
+                max-width: 100%;
+            }
         </style>
     </head>
     <body>
         <div>
-            <label for="task_id">ID der Aufgabe</label>
+            <label for="tasks">Aufgabe</label>
         </div>
         <div>
-            <input value="63f3724e59d70a0dc7069721" pattern="[0-9a-f]{24}" style="width: 100%" name="task_id" id="task_id" type="text" placeholder="hier die 24-stellige ID der Übungsaufgabe einfügen" />
+            <select name="tasks" id="tasks">
+                <option value="">&hellip;</option>
+            </select>
         </div>
         <div>
-            <label for="email">Deine Mailadresse</label>
+            <label for="email">Deine E-Mail-Adresse</label>
         </div>
         <div>
-            <input style="width: 100%" type="email" name="email" id="email" type="text" placeholder="E-Mail-Adresse" value="" />
+            <input text="text" name="email" id="email" placeholder="E-Mail-Adresse" pattern="^[a-zA-Z0-9.!#$%&'*+\/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$" />
+            <span></span>
         </div>
         <div>
             <label for="script">Code (<a href="http://www.angelcode.com/angelscript/" target="_blank">AngelScript</a></label>)
         </div>
         <div>
-            <textarea name="script" id="script" placeholder="hier dein Skript einfügen">
-float multiply(float a, float b)
-{
-    return a * b;
-}
-
-float calc(float a, float b)
-{
-    return multiply(a, b);
-}</textarea>
+            <textarea name="script" id="script" placeholder="hier dein Skript einfügen"></textarea>
         </div>
         <div>
-            <button id="submit">Absenden</button>
+            <button id="submit" disabled>Absenden</button>
         </div>
-        <div id="response" class="pending">Das Ergebnis erscheint hier, nachdem du auf „Absenden“ gedrückt hast.</div>
+        <div id="response" class="pending" default-value="Das Ergebnis erscheint hier, nachdem du auf „Absenden“ gedrückt hast."></div>
     </body>
 </html>
